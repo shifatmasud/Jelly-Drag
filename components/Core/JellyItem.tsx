@@ -3,8 +3,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-import React, { useRef, useId } from 'react';
-import { useMotionValueEvent, MotionValue } from 'framer-motion';
+import React, { useId } from 'react';
+import { useTransform, MotionValue, motion } from 'framer-motion';
 import { useTheme } from '../../Theme.tsx';
 
 interface JellyItemProps {
@@ -14,49 +14,58 @@ interface JellyItemProps {
 
 const JellyItem: React.FC<JellyItemProps> = ({ velocity, index }) => {
   const { theme } = useTheme();
-  const pathRef = useRef<SVGPathElement>(null);
   const uniqueId = useId();
   
-  // Dimensions from spec
+  // Dimensions
   const WIDTH = 400;
   const HEIGHT = 400;
-  const MAX_BEND = 60; // Max pixels of deformation
+  // Increase bend max for visibility
+  const MAX_BEND = 120;
+  // Overscan allows the image to "bulge out" without revealing empty space
+  const OVERSCAN = 100; 
 
-  // Images from Picsum with consistent seeds based on index
-  const imageUrl = `https://picsum.photos/seed/${index + 42}/800/800`;
+  // Images from Picsum
+  const imageUrl = `https://picsum.photos/seed/${index + 123}/800/800`;
 
-  useMotionValueEvent(velocity, "change", (latestVelocity) => {
-    if (!pathRef.current) return;
-
-    // 1. Calculate Intensity (-1 to 1) from velocity
-    // We clamp velocity to a reasonable max (e.g., 2500px/s) to avoid breaking the shape
+  // Reactive Path Calculation
+  const pathD = useTransform(velocity, (latestVelocity) => {
     const maxVelocity = 2500;
     const rawIntensity = latestVelocity / maxVelocity;
     const intensity = Math.max(-1, Math.min(1, rawIntensity));
 
-    // 2. Calculate Bend amount directly from intensity.
-    // This value will be positive when moving right, and negative when moving left.
-    const bend = intensity * MAX_BEND;
-    
-    // 3. Path Construction for a shear-like effect.
-    // Use 1/3 and 2/3 for the control point Y positions to ensure the
-    // curve is perfectly symmetrical, making the bends feel "equal".
-    let d = "";
-    d = `
-      M 0 0
-      L ${WIDTH} 0
-      C ${WIDTH + bend} ${HEIGHT / 3}, ${WIDTH + bend} ${HEIGHT * 2 / 3}, ${WIDTH} ${HEIGHT}
-      L 0 ${HEIGHT}
-      C ${bend} ${HEIGHT * 2 / 3}, ${bend} ${HEIGHT / 3}, 0 0
-      Z
-    `;
-    
-    // Fallback to a simple rectangle if velocity is near zero to prevent visual artifacts.
+    // Stability at rest
     if (Math.abs(intensity) < 0.01) {
-        d = `M 0 0 L ${WIDTH} 0 L ${WIDTH} ${HEIGHT} L 0 ${HEIGHT} Z`;
+        return `M 0 0 L ${WIDTH} 0 L ${WIDTH} ${HEIGHT} L 0 ${HEIGHT} Z`;
     }
 
-    pathRef.current.setAttribute("d", d);
+    const bend = intensity * MAX_BEND;
+    
+    // We adjust control points to create a "belly" skew.
+    // Drag Right (Pos): Left edge bumps Right (Inward), Right edge bumps Right (Outward)
+    const leftControlX = bend;
+    const rightControlX = WIDTH + bend;
+    
+    return `
+      M 0 0
+      L ${WIDTH} 0
+      Q ${rightControlX} ${HEIGHT / 2}, ${WIDTH} ${HEIGHT}
+      L 0 ${HEIGHT}
+      Q ${leftControlX} ${HEIGHT / 2}, 0 0
+      Z
+    `;
+  });
+
+  // Dynamic Shadow for Trailing Edge
+  // When dragging right, left edge curves in. We add shadow there to define volume.
+  const shadowGradient = useTransform(velocity, (v) => {
+      const opacity = Math.min(0.4, Math.abs(v) / 5000); // Max opacity 0.4
+      if (v > 0) {
+          // Moving Right -> Shadow on Left (Trailing)
+          return `linear-gradient(to right, rgba(0,0,0,${opacity}) 0%, transparent 20%)`;
+      } else {
+          // Moving Left -> Shadow on Right (Trailing)
+          return `linear-gradient(to left, rgba(0,0,0,${opacity}) 0%, transparent 20%)`;
+      }
   });
 
   return (
@@ -65,7 +74,8 @@ const JellyItem: React.FC<JellyItemProps> = ({ velocity, index }) => {
         height: HEIGHT, 
         flexShrink: 0,
         position: 'relative',
-        cursor: 'grab'
+        cursor: 'grab',
+        transform: 'translateZ(0)',
     }}>
       <svg 
         width="100%" 
@@ -75,29 +85,55 @@ const JellyItem: React.FC<JellyItemProps> = ({ velocity, index }) => {
       >
         <defs>
           <clipPath id={`clip-${uniqueId}`}>
-            <path ref={pathRef} d={`M 0 0 L ${WIDTH} 0 L ${WIDTH} ${HEIGHT} L 0 ${HEIGHT} Z`} />
+            <motion.path d={pathD} />
           </clipPath>
         </defs>
         
-        {/* Render Image masked by the path */}
+        {/* 
+            Oversized Image Layer 
+            x starts at -OVERSCAN/2 to center it. 
+            Width includes OVERSCAN to ensure we have pixels when bulging out.
+        */}
         <image 
             href={imageUrl} 
-            x="0" 
+            x={-OVERSCAN / 2} 
             y="0" 
-            width={WIDTH} 
+            width={WIDTH + OVERSCAN} 
             height={HEIGHT} 
             clipPath={`url(#clip-${uniqueId})`}
             preserveAspectRatio="xMidYMid slice" 
         />
         
-        {/* Optional Overlay to make it pop against the dark theme */}
-        <rect 
-            width={WIDTH} 
+        {/* Inner Shadow / Lighting to emphasize the bend */}
+        <motion.rect 
+            width={WIDTH + OVERSCAN} 
             height={HEIGHT} 
-            fill={theme.Color.Accent.Surface[1]} 
-            opacity={0.1} 
+            x={-OVERSCAN / 2}
+            fill="transparent"
+            style={{ backgroundImage: shadowGradient }}
+            clipPath={`url(#clip-${uniqueId})`}
+            pointerEvents="none"
+        />
+        
+        {/* Shine/Reflection Overlay */}
+        <rect 
+            width={WIDTH + OVERSCAN} 
+            height={HEIGHT} 
+            x={-OVERSCAN / 2}
+            fill="white" 
+            opacity={0.15} 
             clipPath={`url(#clip-${uniqueId})`} 
-            style={{ pointerEvents: 'none', mixBlendMode: 'overlay' }}
+            style={{ pointerEvents: 'none', mixBlendMode: 'soft-light' }}
+        />
+        
+        {/* Border Outline */}
+        <motion.path 
+             d={pathD}
+             fill="none" 
+             stroke={theme.Color.Base.Surface[1]} 
+             strokeWidth="3"
+             opacity={0.5}
+             style={{ pointerEvents: 'none' }}
         />
       </svg>
     </div>
