@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import React, { useRef, useId } from 'react';
-import { useTransform, useMotionValueEvent, MotionValue } from 'framer-motion';
+import { useMotionValueEvent, MotionValue } from 'framer-motion';
 import { useTheme } from '../../Theme.tsx';
 
 interface JellyItemProps {
@@ -28,54 +28,30 @@ const JellyItem: React.FC<JellyItemProps> = ({ velocity, index }) => {
   useMotionValueEvent(velocity, "change", (latestVelocity) => {
     if (!pathRef.current) return;
 
-    // 1. Calculate Intensity (-1 to 1)
-    // We clamp velocity to a reasonable max (e.g., 2000px/s) to avoid breaking the shape
+    // 1. Calculate Intensity (-1 to 1) from velocity
+    // We clamp velocity to a reasonable max (e.g., 2500px/s) to avoid breaking the shape
     const maxVelocity = 2500;
     const rawIntensity = latestVelocity / maxVelocity;
     const intensity = Math.max(-1, Math.min(1, rawIntensity));
 
-    // 2. Calculate Bend
-    // Drag Right (intensity > 0) -> Left edge bends inward (positive x shift)
-    // Drag Left (intensity < 0) -> Right edge bends inward (negative x shift relative to width)
+    // 2. Calculate Bend amount directly from intensity.
+    // This value will be positive when moving right, and negative when moving left.
+    const bend = intensity * MAX_BEND;
     
-    // We dampen the bend slightly for top/bottom to keep it subtle
-    const currentBend = intensity * MAX_BEND;
-    
-    // 3. Path Construction
-    // Default Rect: (0,0) -> (W,0) -> (W,H) -> (0,H)
-    
+    // 3. Path Construction for a shear-like effect.
+    // Use 1/3 and 2/3 for the control point Y positions to ensure the
+    // curve is perfectly symmetrical, making the bends feel "equal".
     let d = "";
+    d = `
+      M 0 0
+      L ${WIDTH} 0
+      C ${WIDTH + bend} ${HEIGHT / 3}, ${WIDTH + bend} ${HEIGHT * 2 / 3}, ${WIDTH} ${HEIGHT}
+      L 0 ${HEIGHT}
+      C ${bend} ${HEIGHT * 2 / 3}, ${bend} ${HEIGHT / 3}, 0 0
+      Z
+    `;
     
-    if (intensity > 0) {
-       // --- MOVING RIGHT (Left Edge trails/bends IN) ---
-       const bend = Math.abs(currentBend);
-       
-       d = `
-         M 0 0
-         C ${WIDTH * 0.4} 0, ${WIDTH * 0.6} 0, ${WIDTH} 0  
-         L ${WIDTH} ${HEIGHT}
-         C ${WIDTH * 0.6} ${HEIGHT}, ${WIDTH * 0.4} ${HEIGHT}, 0 ${HEIGHT}
-         C ${bend} ${HEIGHT * 0.66}, ${bend} ${HEIGHT * 0.33}, 0 0
-         Z
-       `;
-       // Note: Top/Bottom curves are flattened here, 
-       // but left edge (last C command) curves from (0,H) back to (0,0) via (bend, ...)
-    } else {
-       // --- MOVING LEFT (Right Edge trails/bends IN) ---
-       const bend = Math.abs(currentBend);
-       const rightEdgeX = WIDTH - bend;
-       
-       d = `
-         M 0 0
-         C ${WIDTH * 0.4} 0, ${WIDTH * 0.6} 0, ${WIDTH} 0
-         C ${rightEdgeX} ${HEIGHT * 0.33}, ${rightEdgeX} ${HEIGHT * 0.66}, ${WIDTH} ${HEIGHT}
-         C ${WIDTH * 0.6} ${HEIGHT}, ${WIDTH * 0.4} ${HEIGHT}, 0 ${HEIGHT}
-         L 0 0
-         Z
-       `;
-    }
-    
-    // Fallback to straight rectangle if near zero to avoid artifacts
+    // Fallback to a simple rectangle if velocity is near zero to prevent visual artifacts.
     if (Math.abs(intensity) < 0.01) {
         d = `M 0 0 L ${WIDTH} 0 L ${WIDTH} ${HEIGHT} L 0 ${HEIGHT} Z`;
     }
