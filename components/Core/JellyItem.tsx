@@ -126,15 +126,7 @@ const JellyItem: React.FC<JellyItemProps> = ({ velocity, index }) => {
             style={{ pointerEvents: 'none', mixBlendMode: 'soft-light' }}
         />
         
-        {/* Border Outline */}
-        <motion.path 
-             d={pathD}
-             fill="none" 
-             stroke={theme.Color.Base.Surface[1]} 
-             strokeWidth="3"
-             opacity={0.5}
-             style={{ pointerEvents: 'none' }}
-        />
+        {/* Border Outline removed for a cleaner effect. */}
       </svg>
     </div>
   );

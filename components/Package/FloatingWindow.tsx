@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -46,8 +47,8 @@ const FloatingWindow: React.FC<FloatingWindowProps> = ({
     top: '50%',
     left: '50%',
     width: '400px',
-    height: 'auto',
-    maxHeight: '600px',
+    height: 'fit-content',
+    maxHeight: '90vh',
     backgroundColor: `${theme.Color.Base.Surface[1]}dd`,
     backdropFilter: 'blur(20px)',
     borderRadius: theme.radius['Radius.L'],
@@ -78,6 +79,7 @@ const FloatingWindow: React.FC<FloatingWindowProps> = ({
     flex: 1,
     color: theme.Color.Base.Content[1],
     position: 'relative',
+    minHeight: '100px', 
   };
 
   const footerStyle: React.CSSProperties = {
