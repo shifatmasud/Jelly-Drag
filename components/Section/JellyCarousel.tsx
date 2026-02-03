@@ -1,4 +1,5 @@
 
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -19,18 +20,38 @@ const JellyCarousel = () => {
   // A fixed bend amount is used since padding has been removed.
   const MAX_CONTAINER_BEND = 80; 
 
-  // 1. Motion Logic
+  // 1. Motion Logic for Dragging Items
   const x = useMotionValue(0);
   const rawVelocity = useVelocity(x);
   
-  // 2. The "Master Spring"
+  // 2. The "Master Spring" for item & track skew effect on drag
   const skewVelocity = useSpring(rawVelocity, {
     stiffness: 400,
     damping: 40,
     mass: 1
   });
   
-  // 3. Container Bending Logic
+  // 3. Container Bending Logic (Now on Hover or Touch)
+  const [isHovered, setIsHovered] = useState(false);
+  const hoverProgress = useSpring(0, { stiffness: 400, damping: 40 });
+
+  useEffect(() => {
+    hoverProgress.set(isHovered ? 1 : 0);
+  }, [isHovered, hoverProgress]);
+
+  // Handlers to translate hover state for touch devices
+  const handlePointerDown = (event: React.PointerEvent) => {
+    if (event.pointerType === 'touch') {
+      setIsHovered(true);
+    }
+  };
+
+  const handlePointerUpOrCancel = (event: React.PointerEvent) => {
+    if (event.pointerType === 'touch') {
+      setIsHovered(false);
+    }
+  };
+
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   useEffect(() => {
@@ -39,14 +60,12 @@ const JellyCarousel = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const clipPathD = useTransform(skewVelocity, (latestVelocity) => {
+  // The container's clip path now bends based on hover progress
+  const clipPathD = useTransform(hoverProgress, (progress) => {
     const w = windowWidth;
     const h = CONTAINER_HEIGHT;
     
-    const maxAbsVelocity = 3000;
-    const intensity = Math.min(1, Math.abs(latestVelocity) / maxAbsVelocity);
-    
-    const bendAmount = intensity * MAX_CONTAINER_BEND;
+    const bendAmount = progress * MAX_CONTAINER_BEND;
 
     // Hourglass shape calculation based on container dimensions
     return `
@@ -58,7 +77,7 @@ const JellyCarousel = () => {
     `;
   });
 
-  // 4. Track Skew Logic
+  // 4. Track Skew Logic (remains tied to drag velocity for effect)
   const trackSkewX = useTransform(skewVelocity, [-3000, 3000], [10, -10]);
 
   // 9 Items as per spec
@@ -74,12 +93,19 @@ const JellyCarousel = () => {
         backgroundColor: 'transparent', // Let the body background show through
         overflow: 'hidden'
     }}>
-      {/* The Carousel Strip Wrapper */}
-      <div style={{
+      {/* The Carousel Strip Wrapper, now with hover and touch detection */}
+      <motion.div 
+        style={{
           position: 'relative',
           width: '100%',
           height: CONTAINER_HEIGHT,
-      }}>
+        }}
+        onHoverStart={() => setIsHovered(true)}
+        onHoverEnd={() => setIsHovered(false)}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUpOrCancel}
+        onPointerCancel={handlePointerUpOrCancel}
+      >
 
         {/* The "void" background layer has been removed. */}
 
@@ -143,7 +169,7 @@ const JellyCarousel = () => {
             </motion.div>
         </div>
         
-      </div>
+      </motion.div>
     </div>
   );
 };
